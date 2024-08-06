@@ -1,0 +1,1 @@
+from .resnetblock import resnet20,Classify_with_bitwidth
