@@ -3,8 +3,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.nn.init as init
 from torch.autograd import Function, Variable
+from torch.cuda.amp import autocast
 
-torch.autograd.set_detect_anomaly(True)
 
 K = 4
 global count
@@ -77,6 +77,7 @@ class Conv_with_bitwidth(nn.Module):
         self.quantize = DoReFaQuant.apply
         self.bitwidth = bitwidth
 
+    @autocast(True)
     def forward(self, x):
         """Apply quantization, convolution, batch normalization, and activation to input tensor."""
         vhat = self.quantize(self.conv.weight, self.bitwidth)
@@ -94,14 +95,17 @@ class Conv_with_bitwidth(nn.Module):
         return x
 
 class Linear_with_bitwidth(nn.Linear):
-	def __init__(self, in_features, out_features, bias = True, bitwidth = 8):
-		super(Linear_with_bitwidth, self).__init__(in_features, out_features, bias)
-		self.quantize = DoReFaQuant.apply
-		self.bitwidth = bitwidth
-	def forward(self, x):
-		vhat = self.quantize(self.weight, self.bitwidth)
-		y = F.linear(x, vhat, self.bias)
-		return y
+    def __init__(self, in_features, out_features, bias = True, bitwidth = 8):
+        super(Linear_with_bitwidth, self).__init__(in_features, out_features, bias)
+        self.quantize = DoReFaQuant.apply
+        self.bitwidth = bitwidth
+        
+    @autocast(True)
+    def forward(self, x):
+        vhat = self.quantize(self.weight, self.bitwidth)
+        y = F.linear(x, vhat, self.bias)
+
+        return y
 
 class ResNetBlock_with_bitwidth(nn.Module):
     def __init__(self, c1, c2, s=1, e=4):
@@ -190,11 +194,7 @@ class v8ClassificationLoss_bitwidth:
     
     def __call__(self, preds, batch):
         """Compute the classification loss between predictions and true labels."""
-
-        
         loss = F.cross_entropy(preds, batch["cls"], reduction="mean")
-        
-        
         l2_alpha = 0.0
         lambda_alpha = 0.0002
         for name, param in self.model.named_parameters():

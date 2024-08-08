@@ -130,7 +130,7 @@ class BaseModel(nn.Module):
 
         Returns:
             (torch.Tensor): The last output of the model.
-        """
+        """    
         y, dt, embeddings = [], [], []  # outputs
         for m in self.model:
             if m.f != -1:  # if not from previous layer
