@@ -362,6 +362,9 @@ class BottleneckCSP(nn.Module):
         y2 = self.cv2(x)
         return self.cv4(self.act(self.bn(torch.cat((y1, y2), 1))))
 
+global count
+count = 0
+
 
 class ResNetBlock(nn.Module):
     """ResNet block with standard convolution layers."""
@@ -375,9 +378,12 @@ class ResNetBlock(nn.Module):
         self.cv3 = Conv(c2, c3, k=1, act=False)
         self.shortcut = nn.Sequential(Conv(c1, c3, k=1, s=s, act=False)) if s != 1 or c1 != c3 else nn.Identity()
 
-    def forward(self, x):
+    def forward(self, x):        
         """Forward pass through the ResNet block."""
+        
         return F.relu(self.cv3(self.cv2(self.cv1(x))) + self.shortcut(x))
+
+
 
 
 class ResNetLayer(nn.Module):
@@ -398,6 +404,9 @@ class ResNetLayer(nn.Module):
             self.layer = nn.Sequential(*blocks)
 
     def forward(self, x):
+        
+
+        
         """Forward pass through the ResNet layer."""
         return self.layer(x)
 

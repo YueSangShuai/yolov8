@@ -593,11 +593,8 @@ class v8ClassificationLoss:
     """Criterion class for computing training losses."""
 
     def __call__(self, preds, batch):
-
         """Compute the classification loss between predictions and true labels."""
-        cirition=FocalLoss()
-        
-        loss = cirition(preds, batch["cls"])
+        loss = F.cross_entropy(preds, batch["cls"], reduction="mean")
         loss_items = loss.detach()
         return loss, loss_items
 
@@ -719,3 +716,17 @@ class v8OBBLoss(v8DetectionLoss):
             b, a, c = pred_dist.shape  # batch, anchors, channels
             pred_dist = pred_dist.view(b, a, 4, c // 4).softmax(3).matmul(self.proj.type(pred_dist.dtype))
         return torch.cat((dist2rbox(pred_dist, pred_angle, anchor_points), pred_angle), dim=-1)
+
+
+class v8ClassificationLoss_Focalloss:
+    """Criterion class for computing training losses."""
+
+    def __call__(self, preds, batch):
+
+        """Compute the classification loss between predictions and true labels."""
+        cirition=FocalLoss()
+        
+        loss = cirition(preds, batch["cls"])
+        loss_items = loss.detach()
+        return loss, loss_items
+

@@ -57,7 +57,7 @@ from ultralytics.nn.modules import (
 from ultralytics.utils import DEFAULT_CFG_DICT, DEFAULT_CFG_KEYS, LOGGER, colorstr, emojis, yaml_load
 from ultralytics.utils.checks import check_requirements, check_suffix, check_yaml
 
-from ultralytics.utils.loss import v8ClassificationLoss, v8DetectionLoss, v8OBBLoss, v8PoseLoss, v8SegmentationLoss ,FocalLoss
+from ultralytics.utils.loss import v8ClassificationLoss, v8DetectionLoss, v8OBBLoss, v8PoseLoss, v8SegmentationLoss ,FocalLoss,v8ClassificationLoss_Focalloss
 
 
 from ultralytics.utils.plotting import feature_visualization
@@ -75,7 +75,7 @@ from ultralytics.utils.torch_utils import (
 from ultralytics.nn.backbone import stem,FusedMBConv,MBConv,mobilenetv4_conv_small,mobilenetv4_conv_medium,mobilenetv4_conv_large
 from ultralytics.nn.yolo_head import MobileNetV4_head
 from ultralytics.nn.yolo_head import ArcFaceHead,ArcFaceLoss,ArcFace_Center_Loss
-
+from ultralytics.nn.diy import ResNetLayer_with_bitwidth,Classify_with_bitwidth,v8ClassificationLoss_bitwidth
 
 try:
     import thop
@@ -450,7 +450,7 @@ class ClassificationModel(BaseModel):
         # print("loss_type",self.yaml["loss"])
         if "loss" not in self.yaml:
             """Initialize the loss criterion for the ClassificationModel."""
-            return v8ClassificationLoss()
+            return v8ClassificationLoss_Focalloss()
         
         if self.yaml["loss"]=="normal":
             return v8ClassificationLoss()
@@ -460,23 +460,23 @@ class ClassificationModel(BaseModel):
             m=self.yaml["m"]
             hidden_channels=self.yaml["hidden_channels"]
             nc=self.yaml["nc"]
+            
             return ArcFaceLoss(hidden_channels=hidden_channels,nc=nc,s=s,m=m,training=self.training)
-        
         elif self.yaml["loss"]=="arcface_centerloss":
+            
             s=self.yaml["s"]
             m=self.yaml["m"]
             hidden_channels=self.yaml["hidden_channels"]
             nc=self.yaml["nc"]
             l1=self.yaml["l1"]
             l2=self.yaml["l2"]
-            
             return ArcFace_Center_Loss(hidden_channels=hidden_channels,nc=nc,s=s,m=m,training=self.training,l1=l1,l2=l2)
         
         elif self.yaml["loss"]=="focalloss":
-            alpha=self.yaml["alpha"]
-            gamma=self.yaml["gamma"]
-            
-            return FocalLoss(nn.BCEWithLogitsLoss(), gamma=1.5)
+            return FocalLoss(nn.BCEWithLogitsLoss(), gamma=1.5, alpha=0.25)
+        elif self.yaml["loss"]=="bitwidth":
+            return v8ClassificationLoss_bitwidth(self.model)
+
 
 
 class RTDETRDetectionModel(DetectionModel):
@@ -931,7 +931,7 @@ def parse_model(d, ch, verbose=True):  # model_dict, input_channels(3)
             MBConv,
             MobileNetV4_head,
             ArcFaceHead,
-            
+            Classify_with_bitwidth
         }:
             c1, c2 = ch[f], args[0]
             if c2 != nc:  # if c2 not equal to number of classes (i.e. for Classify() output)
@@ -956,7 +956,7 @@ def parse_model(d, ch, verbose=True):  # model_dict, input_channels(3)
             if m is HGBlock:
                 args.insert(4, n)  # number of repeats
                 n = 1
-        elif m is ResNetLayer:
+        elif m is ResNetLayer or m is ResNetLayer_with_bitwidth:
             c2 = args[1] if args[3] else args[1] * 4
         elif m is nn.BatchNorm2d:
             args = [ch[f]]
@@ -1047,7 +1047,7 @@ def guess_model_task(model):
         """Guess from YAML dictionary."""
         m = cfg["head"][-1][-2].lower()  # output module name
 
-        if m in {"classify", "classifier", "cls", "fc","mobilenetv4_head","arcfacehead"}:
+        if m in {"classify", "classifier", "cls", "fc","mobilenetv4_head","arcfacehead","classify_with_bitwidth"}:
             return "classify"
         if m == "detect":
             return "detect"
