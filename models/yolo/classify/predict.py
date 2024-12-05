@@ -36,6 +36,7 @@ class ClassificationPredictor(BasePredictor):
     def preprocess(self, img):
         """Converts input image to model-compatible data type."""
         if not isinstance(img, torch.Tensor):
+            print(self.transforms.transforms)
             is_legacy_transform = any(
                 self._legacy_transform_name in str(transform) for transform in self.transforms.transforms
             )

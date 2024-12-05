@@ -1,4 +1,3 @@
-
 import torch
 import torch.nn as nn 
 import torch.nn.functional as F
@@ -26,6 +25,7 @@ class MimicLoss(nn.Module):
             losses.append(self.mse(s, t))
         loss = sum(losses)
         return loss
+
 
 class CWDLoss(nn.Module):
     """PyTorch version of `Channel-wise Distillation for Semantic Segmentation.
@@ -70,12 +70,14 @@ class CWDLoss(nn.Module):
 
 
 class MGDLoss(nn.Module):
-    def __init__(self, channels_s, channels_t, alpha_mgd=0.00002, lambda_mgd=0.65):
+    def __init__(self, channels_s, channels_t, alpha_mgd=0.5, lambda_mgd=0.5):
         super(MGDLoss, self).__init__()
         device = 'cuda' if torch.cuda.is_available() else 'cpu'
         self.alpha_mgd = alpha_mgd
         self.lambda_mgd = lambda_mgd
 
+        
+        
         self.generation = [
             nn.Sequential(
                 nn.Conv2d(channel, channel, kernel_size=3, padding=1),
@@ -93,12 +95,15 @@ class MGDLoss(nn.Module):
         Return:
             torch.Tensor: The calculated loss value of all stages.
         """
+        
         assert len(y_s) == len(y_t)
+        
         losses = []
         for idx, (s, t) in enumerate(zip(y_s, y_t)):
             assert s.shape == t.shape
             losses.append(self.get_dis_loss(s, t, idx) * self.alpha_mgd)
         loss = sum(losses)
+        
         return loss
 
     def get_dis_loss(self, preds_S, preds_T, idx):
@@ -107,7 +112,7 @@ class MGDLoss(nn.Module):
 
         device = preds_S.device
         mat = torch.rand((N, 1, H, W)).to(device)
-        mat = torch.where(mat > 1 - self.lambda_mgd, 0, 1).to(device)
+        mat = torch.where(mat < self.lambda_mgd, 0, 1).to(device)
 
         masked_fea = torch.mul(preds_S, mat)
         new_fea = self.generation[idx](masked_fea)
@@ -156,7 +161,7 @@ class FeatureLoss(nn.Module):
             stu_feats.append(s)
 
         loss = self.feature_loss(stu_feats, tea_feats)
-        print(loss.item())
+        # print(loss.item())
         return self.loss_weight * loss
 
 

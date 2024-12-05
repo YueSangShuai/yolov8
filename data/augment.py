@@ -1201,7 +1201,9 @@ def classify_augmentations(
     force_color_jitter=False,
     erasing=0.0,
     interpolation=Image.BILINEAR,
-    half_finger=0.4
+    half_finger=0.4,
+    half_keep_percentage=[0.2,0.8]
+
 ):
     """
     Classification transforms with augmentation for training. Inspired by timm/data/transforms_factory.py.
@@ -1232,7 +1234,7 @@ def classify_augmentations(
         raise TypeError(f"classify_transforms() size {size} must be integer, not (list, tuple)")
     scale = tuple(scale or (0.08, 1.0))  # default imagenet scale range
     ratio = tuple(ratio or (3.0 / 4.0, 4.0 / 3.0))  # default imagenet ratio range
-    primary_tfl=[Half_finger(half_finger)]
+    primary_tfl=[Half_finger(half_finger,half_keep_percentage)]
     primary_tfl += [T.RandomResizedCrop(size, scale=scale, ratio=ratio, interpolation=interpolation)]
     if hflip > 0.0:
         primary_tfl += [T.RandomHorizontalFlip(p=hflip)]
@@ -1385,10 +1387,12 @@ class ToTensor:
         im = im.half() if self.half else im.float()  # uint8 to fp16/32
         im /= 255.0  # 0-255 to 0.0-1.0
         return im
-    
+
+
 class Half_finger:
-    def __init__(self,p):
+    def __init__(self,p,half_keep_percentage):
         self.p = p
+        self.half_keep_percentage=half_keep_percentage
 
     def get_ROI(self,img):
         orign = img.copy()
@@ -1459,20 +1463,15 @@ class Half_finger:
         if isinstance(im, Image.Image):
             # 将 PIL 图像转换为 numpy 数组
             im = np.array(im)
-        h, w = im.shape[:2]
         
         save_img=im.copy()
         
         # 根据概率决定是否进行数据增强
         if np.random.rand() < self.p:
             ROI,is_ROI = self.get_ROI(im)
+            keep_percentage = random.uniform(min(self.half_keep_percentage), max(self.half_keep_percentage))
             if is_ROI:
-                save_img = self.random_erase_continuous(ROI)
-            save_img = Image.fromarray(save_img)
-            return save_img
-        else:
-            save_img = Image.fromarray(save_img)
-            return save_img
-
-
-
+                save_img = self.random_erase_continuous(ROI,keep_percentage)
+                
+        save_img = Image.fromarray(save_img)
+        return save_img

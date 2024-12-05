@@ -272,7 +272,7 @@ class BaseModel(nn.Module):
             batch (dict): Batch to compute loss on
             preds (torch.Tensor | List[torch.Tensor]): Predictions.
         """
-        if not hasattr(self, "criterion"):
+        if not hasattr(self, "criterion") or self.criterion is None:
             self.criterion = self.init_criterion()
 
         preds = self.forward(batch["img"]) if preds is None else preds
@@ -450,6 +450,7 @@ class ClassificationModel(BaseModel):
         # print("loss_type",self.yaml["loss"])
         if "loss" not in self.yaml:
             """Initialize the loss criterion for the ClassificationModel."""
+            print("use_v8ClassificationLoss_Focalloss")
             return v8ClassificationLoss_Focalloss()
         
         if self.yaml["loss"]=="normal":
@@ -460,7 +461,6 @@ class ClassificationModel(BaseModel):
             m=self.yaml["m"]
             hidden_channels=self.yaml["hidden_channels"]
             nc=self.yaml["nc"]
-            
             return ArcFaceLoss(hidden_channels=hidden_channels,nc=nc,s=s,m=m,training=self.training)
         elif self.yaml["loss"]=="arcface_centerloss":
             
@@ -476,7 +476,6 @@ class ClassificationModel(BaseModel):
             return FocalLoss(nn.BCEWithLogitsLoss(), gamma=1.5, alpha=0.25)
         elif self.yaml["loss"]=="bitwidth":
             return v8ClassificationLoss_bitwidth(self.model)
-
 
 
 class RTDETRDetectionModel(DetectionModel):

@@ -429,8 +429,7 @@ class ClassificationDataset:
             self.root = self.base.root
 
 
-        
-        
+        self.augment=augment
         # Initialize attributes
         if augment and args.fraction < 1.0:  # reduce training fraction
             self.samples = self.samples[: round(len(self.samples) * args.fraction)]
@@ -451,7 +450,8 @@ class ClassificationDataset:
                 hsv_h=args.hsv_h,
                 hsv_s=args.hsv_s,
                 hsv_v=args.hsv_v,
-                half_finger=args.half_finger
+                half_finger=args.half_finger,
+                half_keep_percentage=args.half_keep_percentage
             )
             if augment
             else classify_transforms(size=args.imgsz, crop_fraction=args.crop_fraction)

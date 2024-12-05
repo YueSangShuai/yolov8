@@ -186,7 +186,8 @@ def cfg2dict(cfg):
     if isinstance(cfg, (str, Path)):
         cfg = yaml_load(cfg)  # load dict
     elif isinstance(cfg, SimpleNamespace):
-        cfg = vars(cfg)  # convert to dict
+        cfg = vars(cfg)  # convert to dict\
+
     return cfg
 
 
@@ -206,11 +207,16 @@ def get_cfg(cfg: Union[str, Path, Dict, SimpleNamespace] = DEFAULT_CFG_DICT, ove
     # Merge overrides
     if overrides:
         overrides = cfg2dict(overrides)
+
         if "save_dir" not in cfg:
             overrides.pop("save_dir", None)  # special override keys to ignore
         check_dict_alignment(cfg, overrides)
         cfg = {**cfg, **overrides}  # merge cfg and overrides dicts (prefer overrides)
 
+    
+
+    
+    
     # Special handling for numeric project/name
     for k in "project", "name":
         if k in cfg and isinstance(cfg[k], (int, float)):
@@ -221,7 +227,9 @@ def get_cfg(cfg: Union[str, Path, Dict, SimpleNamespace] = DEFAULT_CFG_DICT, ove
 
     # Type and Value checks
     check_cfg(cfg)
+    
 
+    
     # Return instance
     return IterableSimpleNamespace(**cfg)
 
@@ -229,6 +237,8 @@ def get_cfg(cfg: Union[str, Path, Dict, SimpleNamespace] = DEFAULT_CFG_DICT, ove
 def check_cfg(cfg, hard=True):
     """Check Ultralytics configuration argument types and values."""
     for k, v in cfg.items():
+        
+            
         if v is not None:  # None values may be from optional args
             if k in CFG_FLOAT_KEYS and not isinstance(v, (int, float)):
                 if hard:

@@ -52,8 +52,6 @@ from ultralytics.utils.torch_utils import (
     get_channels,
     get_fpn_features
 )
-
-
 from ultralytics.utils.distill_loss import FeatureLoss,Distill_LogitLoss
 
 class BaseTrainer:
@@ -155,6 +153,8 @@ class BaseTrainer:
 
         #---------------- Distillation setting-------------------------------
         self.model_t = overrides.get("model_t",None)
+
+        
         self.distill_feat_type = overrides.get("distill_feat_type","cwd")             # "cwd","mgd","mimic"                 # False or True
         self.logit_loss =  overrides.get("logit_loss","False")                      # False or True
         
@@ -243,13 +243,17 @@ class BaseTrainer:
 
     def _setup_train(self, world_size):
         """Builds dataloaders and optimizer on correct rank process."""
-
         # Model
         self.run_callbacks("on_pretrain_routine_start")
         ckpt = self.setup_model()
         self.model = self.model.to(self.device)
+
         if self.model_t is not None:
+            ckpt =self.setup_model_t()
+            for k, v in self.model_t.model.named_parameters():
+                v.requires_grad = True
             self.model_t = self.model_t.to(self.device)
+            
         self.set_model_attributes()
 
         # Freeze layers
@@ -336,6 +340,11 @@ class BaseTrainer:
 
     def _do_train(self, world_size=1):
         """Train completed, evaluate and plot if specified by arguments."""
+        if world_size > 1:
+            self._setup_ddp(world_size)
+        self._setup_train(world_size)
+
+        
         self.model = de_parallel(self.model)
         if self.model_t:
             self.model_t= de_parallel(self.model_t)
@@ -343,10 +352,9 @@ class BaseTrainer:
             self.channels_s = get_channels(self.model,self.student_distill_layers)
             self.channels_t = get_channels(self.model_t,self.teacher_distill_layers) 
             self.distill_loss = FeatureLoss(channels_s=self.channels_s, channels_t=self.channels_t, distiller= self.distill_feat_type)
-        if world_size > 1:
-            self._setup_ddp(world_size)
-        self._setup_train(world_size)
-
+        
+        
+        
         nb = len(self.train_loader)  # number of batches
         nw = max(round(self.args.warmup_epochs * nb), 100) if self.args.warmup_epochs > 0 else -1  # warmup iterations
         last_opt_step = -1
@@ -577,9 +585,10 @@ class BaseTrainer:
 
     def setup_model(self):
         """Load/create/download model for any task."""
+        
         if isinstance(self.model, torch.nn.Module):  # if model is loaded beforehand. No setup needed
             return
-
+        
         model, weights = self.model, None
         ckpt = None
         if str(model).endswith(".pt"):
@@ -589,6 +598,23 @@ class BaseTrainer:
             cfg = model
         self.model = self.get_model(cfg=cfg, weights=weights, verbose=RANK == -1)  # calls Model(cfg, weights)
         return ckpt
+    
+    def setup_model_t(self):
+        """Load/create/download model for any task."""
+        if isinstance(self.model_t, torch.nn.Module):  # if model is loaded beforehand. No setup needed
+            return
+        model, weights = self.model_t, None
+        ckpt = None
+        if str(model).endswith(".pt"):
+            weights, ckpt = attempt_load_one_weight(model)
+            cfg = weights.yaml
+        else:
+            cfg = model
+        self.model_t = self.get_model(cfg=cfg, weights=weights, verbose=RANK == -1)  # calls Model(cfg, weights)
+        return ckpt
+
+    
+    
 
     def optimizer_step(self):
         """Perform a single step of the training optimizer with gradient clipping and EMA update."""
@@ -799,7 +825,6 @@ class BaseTrainer:
         
         if model_t is not None and distill_loss is not None:
             for k, v in distill_loss.named_modules():
-                # print(v)
                 if hasattr(v, 'bias') and isinstance(v.bias, nn.Parameter):  # bias (no decay)
                     g[2].append(v.bias)
                 if isinstance(v, bn) or 'bn' in k:  # weight (no decay)

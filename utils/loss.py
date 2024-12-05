@@ -45,7 +45,7 @@ class FocalLoss(nn.Module):
         super().__init__()
 
     @staticmethod
-    def forward(pred, label, gamma=1.5, alpha=0.25):
+    def forward(pred, label, gamma=2, alpha=0.1):
         """Calculates and updates confusion matrix for object detection/classification tasks."""
         label=F.one_hot(label, pred.shape[1]).float()
         loss = F.binary_cross_entropy_with_logits(pred, label, reduction="none")

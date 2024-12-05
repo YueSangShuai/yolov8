@@ -38,7 +38,8 @@ class Conv(nn.Module):
     """Standard convolution with args(ch_in, ch_out, kernel, stride, padding, groups, dilation, activation)."""
 
     default_act = nn.SiLU()  # default activation
-
+    
+    
     def __init__(self, c1, c2, k=1, s=1, p=None, g=1, d=1, act=True):
         """Initialize Conv layer with given arguments including activation."""
         super().__init__()
@@ -49,7 +50,6 @@ class Conv(nn.Module):
     def forward(self, x):
         
         """Apply convolution, batch normalization and activation to input tensor."""
-        # print("666666666",self.conv.weight.shape)
         return self.act(self.bn(self.conv(x)))
 
     def forward_fuse(self, x):

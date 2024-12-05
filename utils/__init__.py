@@ -379,6 +379,7 @@ def yaml_load(file="data.yaml", append_filename=False):
         data = yaml.safe_load(s) or {}  # always return a dict (yaml.safe_load() may return None for empty files)
         if append_filename:
             data["yaml_file"] = str(file)
+        
         return data
 
 
