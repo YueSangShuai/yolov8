@@ -203,11 +203,11 @@ class Classify(nn.Module):
          self.pool = nn.AdaptiveAvgPool2d(1)  # to x(b,c_,1,1)
          self.drop = nn.Dropout(p=0.0, inplace=True)
          self.linear = nn.Linear(c_, c2)
-
     def forward(self, x):
          """Performs a forward pass of the YOLO model on input image data."""
          if isinstance(x, list):
              x = torch.cat(x, 1)
+
         #  x = self.linear(self.bn(self.drop(self.pool((self.conv(x))).flatten(1))))
         #  x = self.linear((self.drop(self.pool(self.bn(self.conv(x))).flatten(1))))
          x = self.linear((self.drop(self.pool((self.conv(x))).flatten(1))))

@@ -75,7 +75,8 @@ from ultralytics.utils.torch_utils import (
 from ultralytics.nn.backbone import stem,FusedMBConv,MBConv,mobilenetv4_conv_small,mobilenetv4_conv_medium,mobilenetv4_conv_large
 from ultralytics.nn.yolo_head import MobileNetV4_head
 from ultralytics.nn.yolo_head import ArcFaceHead,ArcFaceLoss,ArcFace_Center_Loss
-from ultralytics.nn.diy import ResNetLayer_with_bitwidth,Classify_with_bitwidth,v8ClassificationLoss_bitwidth
+from ultralytics.nn.intmodules import Conv_with_bitwidth,C2f_with_bitwidth,Classify_with_bitwidth,Linear_with_bitwidth
+from ultralytics.nn.intmodules import Conv_with_bitwidthV2,C2f_with_bitwidthV2,Classify_with_bitwidthV2,Linear_with_bitwidthV2
 
 try:
     import thop
@@ -190,7 +191,7 @@ class BaseModel(nn.Module):
         """
         if not self.is_fused():
             for m in self.model.modules():
-                if isinstance(m, (Conv, Conv2, DWConv)) and hasattr(m, "bn"):
+                if isinstance(m, (Conv, Conv2, DWConv,Conv_with_bitwidth,Conv_with_bitwidthV2)) and hasattr(m, "bn"):
                     if isinstance(m, Conv2):
                         m.fuse_convs()
                     m.conv = fuse_conv_and_bn(m.conv, m.bn)  # update conv
@@ -249,7 +250,7 @@ class BaseModel(nn.Module):
             m.strides = fn(m.strides)
         return self
 
-    def load(self, weights, verbose=True):
+    def load(self, weights, verbose=True,bit_width=None):
         """
         Load the weights into the model.
 
@@ -259,8 +260,15 @@ class BaseModel(nn.Module):
         """
         model = weights["model"] if isinstance(weights, dict) else weights  # torchvision models are not dicts
         csd = model.float().state_dict()  # checkpoint state_dict as FP32
+        
+
+        
         csd = intersect_dicts(csd, self.state_dict())  # intersect
+        # print(csd)
         self.load_state_dict(csd, strict=False)  # load
+
+        
+        
         if verbose:
             LOGGER.info(f"Transferred {len(csd)}/{len(self.model.state_dict())} items from pretrained weights")
 
@@ -432,6 +440,12 @@ class ClassificationModel(BaseModel):
         if isinstance(m, Classify):  # YOLO Classify() head
             if m.linear.out_features != nc:
                 m.linear = nn.Linear(m.linear.in_features, nc)
+        elif isinstance(m, Classify_with_bitwidth):
+            if m.linear.out_features != nc:
+                m.linear = Linear_with_bitwidth(m.linear.in_features, nc)
+        elif isinstance(m, Classify_with_bitwidthV2):
+            if m.linear.out_features != nc:
+                m.linear = Linear_with_bitwidthV2(m.linear.in_features, nc)
         elif isinstance(m, nn.Linear):  # ResNet, EfficientNet
             if m.out_features != nc:
                 setattr(model, name, nn.Linear(m.in_features, nc))
@@ -450,32 +464,32 @@ class ClassificationModel(BaseModel):
         # print("loss_type",self.yaml["loss"])
         if "loss" not in self.yaml:
             """Initialize the loss criterion for the ClassificationModel."""
-            print("use_v8ClassificationLoss_Focalloss")
+            # print("use_v8ClassificationLoss_Focalloss")
             return v8ClassificationLoss_Focalloss()
         
-        if self.yaml["loss"]=="normal":
-            return v8ClassificationLoss()
+        # if self.yaml["loss"]=="normal":
+        #     return v8ClassificationLoss()
         
-        elif self.yaml["loss"]=="arcface":
-            s=self.yaml["s"]
-            m=self.yaml["m"]
-            hidden_channels=self.yaml["hidden_channels"]
-            nc=self.yaml["nc"]
-            return ArcFaceLoss(hidden_channels=hidden_channels,nc=nc,s=s,m=m,training=self.training)
-        elif self.yaml["loss"]=="arcface_centerloss":
+        # elif self.yaml["loss"]=="arcface":
+        #     s=self.yaml["s"]
+        #     m=self.yaml["m"]
+        #     hidden_channels=self.yaml["hidden_channels"]
+        #     nc=self.yaml["nc"]
+        #     return ArcFaceLoss(hidden_channels=hidden_channels,nc=nc,s=s,m=m,training=self.training)
+        # elif self.yaml["loss"]=="arcface_centerloss":
             
-            s=self.yaml["s"]
-            m=self.yaml["m"]
-            hidden_channels=self.yaml["hidden_channels"]
-            nc=self.yaml["nc"]
-            l1=self.yaml["l1"]
-            l2=self.yaml["l2"]
-            return ArcFace_Center_Loss(hidden_channels=hidden_channels,nc=nc,s=s,m=m,training=self.training,l1=l1,l2=l2)
+        #     s=self.yaml["s"]
+        #     m=self.yaml["m"]
+        #     hidden_channels=self.yaml["hidden_channels"]
+        #     nc=self.yaml["nc"]
+        #     l1=self.yaml["l1"]
+        #     l2=self.yaml["l2"]
+        #     return ArcFace_Center_Loss(hidden_channels=hidden_channels,nc=nc,s=s,m=m,training=self.training,l1=l1,l2=l2)
         
-        elif self.yaml["loss"]=="focalloss":
-            return FocalLoss(nn.BCEWithLogitsLoss(), gamma=1.5, alpha=0.25)
-        elif self.yaml["loss"]=="bitwidth":
-            return v8ClassificationLoss_bitwidth(self.model)
+        # elif self.yaml["loss"]=="focalloss":
+        #     return FocalLoss(nn.BCEWithLogitsLoss(), gamma=1.5, alpha=0.25)
+        # elif self.yaml["loss"]=="bitwidth":
+        #     return v8ClassificationLoss_bitwidth(self.model)
 
 
 class RTDETRDetectionModel(DetectionModel):
@@ -874,9 +888,11 @@ def parse_model(d, ch, verbose=True):  # model_dict, input_channels(3)
     # Args
     max_channels = float("inf")
     nc, act, scales = (d.get(x) for x in ("nc", "activation", "scales"))
+    print(scales)
     depth, width, kpt_shape = (d.get(x, 1.0) for x in ("depth_multiple", "width_multiple", "kpt_shape"))
     if scales:
         scale = d.get("scale")
+        
         if not scale:
             scale = tuple(scales.keys())[0]
             LOGGER.warning(f"WARNING ⚠️ no model scale passed. Assuming scale='{scale}'.")
@@ -930,7 +946,12 @@ def parse_model(d, ch, verbose=True):  # model_dict, input_channels(3)
             MBConv,
             MobileNetV4_head,
             ArcFaceHead,
-            Classify_with_bitwidth
+            C2f_with_bitwidth,
+            C2f_with_bitwidthV2,
+            Conv_with_bitwidth,
+            Conv_with_bitwidthV2,
+            Classify_with_bitwidth,
+            Classify_with_bitwidthV2
         }:
             c1, c2 = ch[f], args[0]
             if c2 != nc:  # if c2 not equal to number of classes (i.e. for Classify() output)
@@ -944,7 +965,7 @@ def parse_model(d, ch, verbose=True):  # model_dict, input_channels(3)
                 )  # num heads
 
             args = [c1, c2, *args[1:]]
-            if m in {BottleneckCSP, C1, C2, C2f, C2fAttn, C3, C3TR, C3Ghost, C3x, RepC3}:
+            if m in {BottleneckCSP, C1, C2, C2f, C2fAttn, C3, C3TR, C3Ghost, C3x, RepC3,C2f_with_bitwidth,C2f_with_bitwidthV2}:
                 args.insert(2, n)  # number of repeats
                 n = 1
         elif m is AIFI:
@@ -955,7 +976,7 @@ def parse_model(d, ch, verbose=True):  # model_dict, input_channels(3)
             if m is HGBlock:
                 args.insert(4, n)  # number of repeats
                 n = 1
-        elif m is ResNetLayer or m is ResNetLayer_with_bitwidth:
+        elif m is ResNetLayer:
             c2 = args[1] if args[3] else args[1] * 4
         elif m is nn.BatchNorm2d:
             args = [ch[f]]
@@ -1046,7 +1067,7 @@ def guess_model_task(model):
         """Guess from YAML dictionary."""
         m = cfg["head"][-1][-2].lower()  # output module name
 
-        if m in {"classify", "classifier", "cls", "fc","mobilenetv4_head","arcfacehead","classify_with_bitwidth"}:
+        if m in {"classify", "classifier", "cls", "fc","mobilenetv4_head","arcfacehead","classify_with_bitwidth","classify_with_bitwidthv2"}:
             return "classify"
         if m == "detect":
             return "detect"
@@ -1074,7 +1095,7 @@ def guess_model_task(model):
         for m in model.modules():
             if isinstance(m, Segment):
                 return "segment"
-            elif isinstance(m, Classify):
+            elif isinstance(m, Classify) or isinstance(m,Classify_with_bitwidth) or isinstance(m,Classify_with_bitwidthV2):
                 return "classify"
             elif isinstance(m, Pose):
                 return "pose"

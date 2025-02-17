@@ -317,6 +317,15 @@ class BaseTrainer:
             if self.args.plots:
                 self.plot_training_labels()
 
+        
+        
+        if self.model_t:
+            self.channels_s = get_channels(self.model,self.student_distill_layers)
+            self.channels_t = get_channels(self.model_t,self.teacher_distill_layers) 
+            self.distill_loss = FeatureLoss(channels_s=self.channels_s, channels_t=self.channels_t, distiller= self.distill_feat_type)
+        
+        
+        
         # Optimizer
         self.accumulate = max(round(self.args.nbs / self.batch_size), 1)  # accumulate loss before optimizing
         weight_decay = self.args.weight_decay * self.batch_size * self.accumulate / self.args.nbs  # scale weight_decay
@@ -338,20 +347,28 @@ class BaseTrainer:
         self.scheduler.last_epoch = self.start_epoch - 1  # do not move
         self.run_callbacks("on_pretrain_routine_end")
 
+    def kl_divergence_loss(self,weights):
+        mean = weights.mean()
+        std = weights.std()
+        # 假设目标是标准正态分布
+        target_mean = 0
+        target_std = 1
+        # 计算KL散度
+        kl_loss = (mean ** 2 + std ** 2 - 2 * std * target_std + target_std ** 2) / 2
+        return kl_loss
+    
+    
+    
     def _do_train(self, world_size=1):
         """Train completed, evaluate and plot if specified by arguments."""
         if world_size > 1:
             self._setup_ddp(world_size)
         self._setup_train(world_size)
 
-        
         self.model = de_parallel(self.model)
         if self.model_t:
             self.model_t= de_parallel(self.model_t)
-        if self.model_t:
-            self.channels_s = get_channels(self.model,self.student_distill_layers)
-            self.channels_t = get_channels(self.model_t,self.teacher_distill_layers) 
-            self.distill_loss = FeatureLoss(channels_s=self.channels_s, channels_t=self.channels_t, distiller= self.distill_feat_type)
+
         
         
         
@@ -362,6 +379,7 @@ class BaseTrainer:
         self.epoch_time_start = time.time()
         self.train_time_start = time.time()
         self.run_callbacks("on_train_start")
+        
         LOGGER.info(
             f'Image sizes {self.args.imgsz} train, {self.args.imgsz} val\n'
             f'Using {self.train_loader.num_workers * (world_size or 1)} dataloader workers\n'
@@ -382,6 +400,7 @@ class BaseTrainer:
                 self.scheduler.step()
 
             self.model.train()
+            
             if RANK != -1:
                 self.train_loader.sampler.set_epoch(epoch)
             pbar = enumerate(self.train_loader)
@@ -395,6 +414,9 @@ class BaseTrainer:
                 pbar = TQDM(enumerate(self.train_loader), total=nb)
             self.tloss = None
             self.optimizer.zero_grad()
+            
+            
+
             for i, batch in pbar:
                 self.run_callbacks("on_train_batch_start")
                 # Warmup
@@ -409,35 +431,62 @@ class BaseTrainer:
                         )
                         if "momentum" in x:
                             x["momentum"] = np.interp(ni, xi, [self.args.warmup_momentum, self.args.momentum])
+                
 
+                
                 # Forward
                 with torch.cuda.amp.autocast(self.amp):
                     batch = self.preprocess_batch(batch)
-                    
+                    torch.autograd.set_detect_anomaly(True)
                     self.loss, self.loss_items = self.model(batch)
-                    self.tloss = (
-                        (self.tloss * i + self.loss_items) / (i + 1) if self.tloss is not None else self.loss_items
-                    )
+                    # assert torch.isnan(self.loss).sum() == 0, print(self.loss)
+                    # torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
+                    append_len = self.loss_items.shape[0] if len(self.loss_items.shape) else 1
+                                        
+                    
+                    resize_loss = torch.zeros(append_len+2, device="cuda")  # cls, distill
+                    resize_loss[:append_len]=self.loss
+                                        
                     if self.model_t:
                         pred_s= self.model(batch['img'])
                         distill_weight = ((1 - math.cos(i * math.pi / len(self.train_loader))) / 2) * (0.1 - 1) + 1
                         stu_features= get_fpn_features(batch['img'],self.model,fpn_layers=self.student_distill_layers)
                         with torch.no_grad():
                             pred_t_offline= self.model_t(batch['img'])
-                            
                             tea_features = get_fpn_features(batch['img'],self.model_t,fpn_layers=self.teacher_distill_layers)
-                            self.dfea_loss =  self.distill_loss(stu_features,tea_features)*distill_weight
-                    if RANK != -1:
-                        self.loss *= world_size
-                        
+
+                        self.dfea_loss =  self.distill_loss(stu_features,tea_features)
+                        resize_loss[append_len] = self.dfea_loss
+                                                  
+                    
                     if self.model_t and self.logit_loss:
                         distill_logit = Distill_LogitLoss(pred_s,pred_t_offline)
                         self.dlogit_loss = distill_logit()
-                        self.loss += self.dlogit_loss
+                        resize_loss[append_len+1] = self.dlogit_loss
+                    
+                #     # 遍历模型的所有模块，筛选出Linear层并打印它们的权重
+                # for module_name, module in self.model.model.named_modules():
+                #     if isinstance(module, nn.Linear):  # 判断是否是Linear层
+                #         for param_name, param in module.named_parameters(recurse=False):
+                #             fullname = f"{module_name}.{param_name}" if module_name else param_name
+                #             resize_loss+=self.kl_divergence_loss(param.data)
+                    
+                    
+                    
                         
-
+                    self.loss=resize_loss.sum()
+                    self.loss_items=resize_loss.detach()
+                    
+                    self.tloss = (
+                            (self.tloss * i + self.loss_items) / (i + 1) if self.tloss is not None else self.loss_items
+                        )
+                    
+                    if RANK != -1:
+                        self.loss *= world_size
+                                
                 # Backward
                 self.scaler.scale(self.loss).backward()
+                
 
                 # Optimize - https://pytorch.org/docs/master/notes/amp_examples.html
                 if ni - last_opt_step >= self.accumulate:
@@ -458,6 +507,8 @@ class BaseTrainer:
                 mem = f"{torch.cuda.memory_reserved() / 1E9 if torch.cuda.is_available() else 0:.3g}G"  # (GB)
                 loss_len = self.tloss.shape[0] if len(self.tloss.shape) else 1
                 losses = self.tloss if loss_len > 1 else torch.unsqueeze(self.tloss, 0)
+                
+                
                 if RANK in {-1, 0}:
                     pbar.set_description(
                         ("%11s" * 2 + "%11.4g" * (2 + loss_len))
@@ -810,6 +861,8 @@ class BaseTrainer:
             lr_fit = round(0.002 * 5 / (4 + nc), 6)  # lr0 fit equation to 6 decimal places
             name, lr, momentum = ("SGD", 0.01, 0.9) if iterations > 10000 else ("AdamW", lr_fit, 0.9)
             self.args.warmup_bias_lr = 0.0  # no higher than 0.01 for Adam
+
+        
 
         for module_name, module in model.named_modules():
             for param_name, param in module.named_parameters(recurse=False):

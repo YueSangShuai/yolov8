@@ -39,7 +39,6 @@ class Conv(nn.Module):
 
     default_act = nn.SiLU()  # default activation
     
-    
     def __init__(self, c1, c2, k=1, s=1, p=None, g=1, d=1, act=True):
         """Initialize Conv layer with given arguments including activation."""
         super().__init__()

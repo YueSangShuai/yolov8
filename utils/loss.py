@@ -45,7 +45,7 @@ class FocalLoss(nn.Module):
         super().__init__()
 
     @staticmethod
-    def forward(pred, label, gamma=2, alpha=0.1):
+    def forward(pred, label, gamma=2, alpha=0.25):
         """Calculates and updates confusion matrix for object detection/classification tasks."""
         label=F.one_hot(label, pred.shape[1]).float()
         loss = F.binary_cross_entropy_with_logits(pred, label, reduction="none")
@@ -593,10 +593,12 @@ class v8ClassificationLoss:
     """Criterion class for computing training losses."""
 
     def __call__(self, preds, batch):
-        """Compute the classification loss between predictions and true labels."""
-        loss = F.cross_entropy(preds, batch["cls"], reduction="mean")
+        cirition=FocalLoss()
+        loss = cirition(preds, batch["cls"])
         loss_items = loss.detach()
         return loss, loss_items
+        
+        
 
 
 class v8OBBLoss(v8DetectionLoss):

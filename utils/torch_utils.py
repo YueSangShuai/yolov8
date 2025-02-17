@@ -258,7 +258,6 @@ def model_info(model, detailed=False, verbose=True, imgsz=640):
                 "%5g %40s %9s %12g %20s %10.3g %10.3g %10s"
                 % (i, name, p.requires_grad, p.numel(), list(p.shape), p.mean(), p.std(), p.dtype)
             )
-
     flops = get_flops(model, imgsz)
     fused = " (fused)" if getattr(model, "is_fused", lambda: False)() else ""
     fs = f", {flops:.1f} GFLOPs" if flops else ""
@@ -310,7 +309,6 @@ def get_flops(model, imgsz=640):
     """Return a YOLO model's FLOPs."""
     if not thop:
         return 0.0  # if not installed return 0.0 GFLOPs
-
     try:
         model = de_parallel(model)
         p = next(model.parameters())

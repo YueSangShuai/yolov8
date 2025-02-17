@@ -116,7 +116,7 @@ class ClassificationTrainer(BaseTrainer):
 
     def get_validator(self):
         """Returns an instance of ClassificationValidator for validation."""
-        self.loss_names = ["loss"]
+        self.loss_names = ["clsloss","dist_fea","dist_log"]
         return yolo.classify.ClassificationValidator(self.test_loader, self.save_dir, _callbacks=self.callbacks)
 
     def label_loss_items(self, loss_items=None, prefix="train"):
@@ -126,10 +126,11 @@ class ClassificationTrainer(BaseTrainer):
         Not needed for classification but necessary for segmentation & detection
         """
         keys = [f"{prefix}/{x}" for x in self.loss_names]
-        if loss_items is None:
+        if loss_items is not None:
+            loss_items = [round(float(x), 5) for x in loss_items]  # convert tensors to 5 decimal place floats
+            return dict(zip(keys, loss_items))
+        else:
             return keys
-        loss_items = [round(float(loss_items), 5)]
-        return dict(zip(keys, loss_items))
 
     def plot_metrics(self):
         """Plots metrics from a CSV file."""

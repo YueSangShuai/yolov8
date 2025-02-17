@@ -70,13 +70,12 @@ class CWDLoss(nn.Module):
 
 
 class MGDLoss(nn.Module):
-    def __init__(self, channels_s, channels_t, alpha_mgd=0.5, lambda_mgd=0.5):
+    def __init__(self, channels_s, channels_t, alpha_mgd=0.00007, lambda_mgd=0.65):
         super(MGDLoss, self).__init__()
         device = 'cuda' if torch.cuda.is_available() else 'cpu'
         self.alpha_mgd = alpha_mgd
         self.lambda_mgd = lambda_mgd
 
-        
         
         self.generation = [
             nn.Sequential(
@@ -155,15 +154,22 @@ class FeatureLoss(nn.Module):
 
         for idx, (s, t) in enumerate(zip(y_s, y_t)):
             s = self.align_module[idx](s)
+            
             s = self.norm[idx](s)
             t = self.norm[idx](t)
             tea_feats.append(t)
             stu_feats.append(s)
 
         loss = self.feature_loss(stu_feats, tea_feats)
-        # print(loss.item())
+
         return self.loss_weight * loss
 
+    def print_trainable_params(self):
+        # 打印出所有可以反向传播的参数
+        for name, param in self.named_parameters():
+            if param.requires_grad:
+                print(f"Trainable parameter: {name}, Shape: {param.shape}, Requires grad: {param.requires_grad}")
+    
 
 class Distill_LogitLoss:
     def __init__(self,p, t_p, alpha =0.25):
