@@ -77,6 +77,8 @@ from ultralytics.nn.yolo_head import MobileNetV4_head
 from ultralytics.nn.yolo_head import ArcFaceHead,ArcFaceLoss,ArcFace_Center_Loss
 from ultralytics.nn.intmodules import Conv_with_bitwidth,C2f_with_bitwidth,Classify_with_bitwidth,Linear_with_bitwidth
 from ultralytics.nn.intmodules import Conv_with_bitwidthV2,C2f_with_bitwidthV2,Classify_with_bitwidthV2,Linear_with_bitwidthV2
+from ultralytics.nn.intmodules import Manba_Conv,Manba_C2f,Manba_Classify
+from ultralytics.manbaquant import QuantLinear
 
 try:
     import thop
@@ -191,7 +193,7 @@ class BaseModel(nn.Module):
         """
         if not self.is_fused():
             for m in self.model.modules():
-                if isinstance(m, (Conv, Conv2, DWConv,Conv_with_bitwidth,Conv_with_bitwidthV2)) and hasattr(m, "bn"):
+                if isinstance(m, (Conv, Conv2, DWConv,Conv_with_bitwidth,Conv_with_bitwidthV2,Manba_Conv)) and hasattr(m, "bn"):
                     if isinstance(m, Conv2):
                         m.fuse_convs()
                     m.conv = fuse_conv_and_bn(m.conv, m.bn)  # update conv
@@ -446,6 +448,12 @@ class ClassificationModel(BaseModel):
         elif isinstance(m, Classify_with_bitwidthV2):
             if m.linear.out_features != nc:
                 m.linear = Linear_with_bitwidthV2(m.linear.in_features, nc)
+        
+        elif isinstance(m, Manba_Classify):
+            if m.linear.out_features != nc:
+                linear=nn.Linear(m.linear.in_features, nc)
+                m.linear = QuantLinear(linear)
+        
         elif isinstance(m, nn.Linear):  # ResNet, EfficientNet
             if m.out_features != nc:
                 setattr(model, name, nn.Linear(m.in_features, nc))
@@ -948,10 +956,13 @@ def parse_model(d, ch, verbose=True):  # model_dict, input_channels(3)
             ArcFaceHead,
             C2f_with_bitwidth,
             C2f_with_bitwidthV2,
+            Manba_C2f,
             Conv_with_bitwidth,
             Conv_with_bitwidthV2,
+            Manba_Conv,
             Classify_with_bitwidth,
-            Classify_with_bitwidthV2
+            Classify_with_bitwidthV2,
+            Manba_Classify
         }:
             c1, c2 = ch[f], args[0]
             if c2 != nc:  # if c2 not equal to number of classes (i.e. for Classify() output)
@@ -965,7 +976,7 @@ def parse_model(d, ch, verbose=True):  # model_dict, input_channels(3)
                 )  # num heads
 
             args = [c1, c2, *args[1:]]
-            if m in {BottleneckCSP, C1, C2, C2f, C2fAttn, C3, C3TR, C3Ghost, C3x, RepC3,C2f_with_bitwidth,C2f_with_bitwidthV2}:
+            if m in {BottleneckCSP, C1, C2, C2f, C2fAttn, C3, C3TR, C3Ghost, C3x, RepC3,C2f_with_bitwidth,C2f_with_bitwidthV2,Manba_C2f}:
                 args.insert(2, n)  # number of repeats
                 n = 1
         elif m is AIFI:
@@ -1067,7 +1078,7 @@ def guess_model_task(model):
         """Guess from YAML dictionary."""
         m = cfg["head"][-1][-2].lower()  # output module name
 
-        if m in {"classify", "classifier", "cls", "fc","mobilenetv4_head","arcfacehead","classify_with_bitwidth","classify_with_bitwidthv2"}:
+        if m in {"classify", "classifier", "cls", "fc","mobilenetv4_head","arcfacehead","classify_with_bitwidth","classify_with_bitwidthv2","manba_classify"}:
             return "classify"
         if m == "detect":
             return "detect"
@@ -1095,7 +1106,7 @@ def guess_model_task(model):
         for m in model.modules():
             if isinstance(m, Segment):
                 return "segment"
-            elif isinstance(m, Classify) or isinstance(m,Classify_with_bitwidth) or isinstance(m,Classify_with_bitwidthV2):
+            elif isinstance(m, Classify) or isinstance(m,Classify_with_bitwidth) or isinstance(m,Classify_with_bitwidthV2) or isinstance(m,Manba_Classify):
                 return "classify"
             elif isinstance(m, Pose):
                 return "pose"

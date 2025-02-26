@@ -15,7 +15,7 @@ def autopad(k, p=None, d=1):  # kernel, padding, dilation
         p = k // 2 if isinstance(k, int) else [x // 2 for x in k]  # auto-pad
     return p
 
-# k = 8import torch
+
 
 class PACTFunction(torch.autograd.Function):
     @staticmethod
@@ -132,7 +132,7 @@ class Conv_with_bitwidth(nn.Module):
         vhat = self.quantize(self.conv.weight)
         x = F.conv2d(x, vhat, self.conv.bias, self.conv.stride, self.conv.padding, self.conv.dilation, self.conv.groups)
         x = self.bn(x)
-        x=self.act(x)
+        x = self.act(x)
         x = self.PACT(x)
         return x
 
@@ -206,7 +206,6 @@ class Classify_with_bitwidth(nn.Module):
     """YOLOv8 classification head, i.e. x(b,c1,20,20) to x(b,c2)."""
 
     def __init__(self, c1, c2, k=1, s=1, p=None, g=1):
-
          """Initializes YOLOv8 classification head with specified input and output channels, kernel size, stride,
          padding, and groups.
          """
@@ -223,6 +222,8 @@ class Classify_with_bitwidth(nn.Module):
         """Performs a forward pass of the YOLO model on input image data."""
         if isinstance(x, list):
             x = torch.cat(x, 1)
-
+            
+            
+        
         x = self.linear((self.drop(self.pool((self.conv(x))).flatten(1))))
         return x if self.training else x.softmax(1)

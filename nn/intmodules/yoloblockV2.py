@@ -18,6 +18,7 @@ def autopad(k, p=None, d=1):  # kernel, padding, dilation
 
 from .quantization import ClippedLinearQuantization,LearnedClippedLinearQuantization,dorefa_quantize_param
 
+
 class DoReFaQuantV2(nn.Module):
     def __init__(self, k=8):
         super(DoReFaQuantV2, self).__init__()
@@ -139,5 +140,10 @@ class Classify_with_bitwidthV2(nn.Module):
         if isinstance(x, list):
             x = torch.cat(x, 1)
 
-        x = self.linear((self.drop(self.pool((self.conv(x))).flatten(1))))
+        if self.linear.weight.dtype==torch.float16:
+            x =self.conv(x).to(torch.float16)
+        else:
+            x=self.conv(x)
+        
+        x = self.linear((self.drop(self.pool((x)).flatten(1))))
         return x if self.training else x.softmax(1)

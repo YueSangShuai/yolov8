@@ -23,7 +23,9 @@ def asymmetric_linear_quantization_params(num_bits, saturation_min, saturation_m
     elif scalar_min and not scalar_max:
         sat_min = sat_min.to(sat_max.device)
 
+    # import numpy as np
     if any(sat_min > sat_max):
+        # sat_min, sat_max = np.minimum(sat_min, sat_max), np.maximum(sat_min, sat_max)
         raise ValueError('saturation_min must be smaller than saturation_max')
 
     n = 2 ** num_bits - 1
@@ -120,6 +122,7 @@ class ClippedLinearQuantization(nn.Module):
 
 
 class LearnedClippedLinearQuantization(nn.Module):
+
     def __init__(self, num_bits, init_act_clip_val, dequantize=True, inplace=False):
         super(LearnedClippedLinearQuantization, self).__init__()
         self.num_bits = num_bits
