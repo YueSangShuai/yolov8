@@ -274,6 +274,10 @@ class BaseModel(nn.Module):
         if verbose:
             LOGGER.info(f"Transferred {len(csd)}/{len(self.model.state_dict())} items from pretrained weights")
 
+    
+    def purne(self):
+        
+    
     def loss(self, batch, preds=None):
         """
         Compute loss.
