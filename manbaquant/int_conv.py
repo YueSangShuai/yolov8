@@ -32,8 +32,8 @@ class QuantConv1d(nn.Conv1d):
         else:
             self.bias = None
         # de-activate the quantized forward default
-        self.use_weight_quant = False
-        self.use_act_quant = False
+        self.use_weight_quant = True
+        self.use_act_quant = True
         # initialize quantizer
         self.weight_quantizer = UniformAffineQuantizer(**weight_quant_params,shape=org_module.weight.shape,is_weight=True,observe=observe)
         if not disable_input_quant:
@@ -49,7 +49,7 @@ class QuantConv1d(nn.Conv1d):
         self.dilation = org_module.dilation
         self.groups = org_module.groups
         
-        self.weight_quantized = False
+        self.weight_quantized = True
 
      
     def forward(self, input: torch.Tensor):
@@ -178,8 +178,8 @@ class QuantConv3d(nn.Conv3d):
         else:
             self.bias = None
         # de-activate the quantized forward default
-        self.use_weight_quant = False
-        self.use_act_quant = False
+        self.use_weight_quant = True
+        self.use_act_quant = True
         # initialize quantizer
         self.weight_quantizer = UniformAffineQuantizer(**weight_quant_params,shape=org_module.weight.shape,is_weight=True,observe=observe)
         if not disable_input_quant:

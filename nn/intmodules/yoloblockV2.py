@@ -23,13 +23,16 @@ class DoReFaQuantV2(nn.Module):
     def __init__(self, k=8):
         super(DoReFaQuantV2, self).__init__()
         self.k = k
+        self.scale=0.0
+        self.zero_point=0.0
 
     def forward(self, x):
-        return dorefa_quantize_param(x, self.k)
-
+        out,scale, zero_point=dorefa_quantize_param(x, self.k)
+        self.scale=scale
+        self.zero_point=zero_point
+        return out
     def extra_repr(self):
-        return f'k={self.k}'
-
+        return f'k={self.k} ,scale={self.scale}, zero_point={self.zero_point}'
 
 
 class Conv_with_bitwidthV2(nn.Module):
@@ -60,7 +63,6 @@ class Conv_with_bitwidthV2(nn.Module):
         return x
 
 
-
 class Linear_with_bitwidthV2(nn.Linear):
     def __init__(self, in_features, out_features, bias=True, bitwidth=8):
         super(Linear_with_bitwidthV2, self).__init__(in_features, out_features, bias)
@@ -72,7 +74,6 @@ class Linear_with_bitwidthV2(nn.Linear):
         vhat = self.quantize(self.weight)
         y = F.linear(x, vhat, self.bias)
         return y
-
 
 
 class C2f_with_bitwidthV2(nn.Module):
@@ -133,7 +134,7 @@ class Classify_with_bitwidthV2(nn.Module):
          self.bn = nn.BatchNorm2d(c_)
          self.pool = nn.AdaptiveAvgPool2d(1)  # to x(b,c_,1,1)
          self.drop = nn.Dropout(p=0.0, inplace=True)
-         self.linear = nn.Linear(c_, c2)
+         self.linear = Linear_with_bitwidthV2(c_, c2)
 
     def forward(self, x):
         """Performs a forward pass of the YOLO model on input image data."""

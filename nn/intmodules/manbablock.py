@@ -1,4 +1,4 @@
-from ultralytics.manbaquant import QuantConv2d,QuantLinear
+from ultralytics.manbaquant import QuantConv2d,QuantLinear,QuantAdd,QuantSilu
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -19,7 +19,7 @@ def autopad(k, p=None, d=1):  # kernel, padding, dilation
 class Manba_Conv(nn.Module):
     """Standard convolution with args(ch_in, ch_out, kernel, stride, padding, groups, dilation, activation)."""
 
-    default_act = nn.SiLU()  # default activation
+    default_act = QuantSilu()  # default activation
     
     def __init__(self, c1, c2, k=1, s=1, p=None, g=1, d=1, act=True):
         """Initialize Conv layer with given arguments including activation."""
@@ -78,10 +78,10 @@ class Manba_Bottleneck(nn.Module):
         self.cv1 = Manba_Conv(c1, c_, k[0], 1)
         self.cv2 = Manba_Conv(c_, c2, k[1], 1, g=g)
         self.add = shortcut and c1 == c2
-
+        self.add_func=QuantAdd()
     def forward(self, x):
         """'forward()' applies the YOLO FPN to input data."""
-        return x + self.cv2(self.cv1(x)) if self.add else self.cv2(self.cv1(x))
+        return self.add_func(x , self.cv2(self.cv1(x))) if self.add else self.cv2(self.cv1(x))
     
     
 class Manba_Classify(nn.Module):
@@ -98,6 +98,7 @@ class Manba_Classify(nn.Module):
          self.bn = nn.BatchNorm2d(c_)
          self.pool = nn.AdaptiveAvgPool2d(1)  # to x(b,c_,1,1)
          self.drop = nn.Dropout(p=0.0, inplace=True)
+         
          linear = nn.Linear(c_, c2)
          self.linear=QuantLinear(linear)
 

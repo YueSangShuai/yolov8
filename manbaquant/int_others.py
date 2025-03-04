@@ -6,12 +6,12 @@ from .quantizer import UniformAffineQuantizer
 # C8C8Add
 class QuantAdd(nn.Module):
     def __init__(self,
-                 x1_quant_params: dict = {},
-                 x2_quant_params: dict = {},
-                 ):
+                 x1_quant_params: dict = {"dynamic_method":"per_channel","per_channel_axes":[1],"n_bits":8,"percent":0.999},
+                 x2_quant_params: dict = {"dynamic_method":"per_channel","per_channel_axes":[1],"n_bits":8,"percent":0.999},
+                 observe="minmax"):
         super().__init__()
-        self.x1_quantizer = UniformAffineQuantizer(**x1_quant_params)
-        self.x2_quantizer = UniformAffineQuantizer(**x2_quant_params)
+        self.x1_quantizer = UniformAffineQuantizer(**x1_quant_params,observe=observe)
+        self.x2_quantizer = UniformAffineQuantizer(**x2_quant_params,observe=observe)
         self.use_act_quant = False
     
     def forward(self,x1,x2):
@@ -35,7 +35,19 @@ class QuantSoftmax(nn.Module):
         if attention_mask is not None:
             attn_weights = attn_weights + attention_mask
             attn_weights = torch.max(attn_weights, torch.tensor(torch.finfo(attn_weights.dtype).min))
-        return F.softmax(attn_weights,dim=-1,dtype=torch.float32).to(ret_dtype)
+
+class QuantSilu(nn.Module):
+    def __init__(self,act_quant_params:dict = dict(),):
+        super().__init__()
+        self.x1_quantizer = UniformAffineQuantizer(**act_quant_params)
+        self.use_act_quant = True
+       
+    def forward(self,x1): 
+        if self.use_act_quant:
+            x1 = self.x1_quantizer(x1)
+            
+        return x1 * F.sigmoid(x1)
+
 
 class QuantSwiglu(nn.Module):
     def __init__(self,x1_quant_params=dict(),x2_quant_params = dict()):
@@ -71,3 +83,5 @@ class QuantSwilu(nn.Module):
             return x1 *  F.sigmoid(x1)
         else:
             return x1 * F.sigmoid(x1 * self.smooth.to(x1.device).view(1,1,-1))
+        
+        

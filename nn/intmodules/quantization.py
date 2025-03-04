@@ -80,7 +80,7 @@ def dorefa_quantize_param(param_fp, num_bits):
         out = out / (2 * out.abs().max()) + 0.5
         out = LinearQuantizeSTE.apply(out, scale, zero_point, True, False)
         out = 2 * out - 1
-    return out
+    return out,scale, zero_point
 
 
 
@@ -123,12 +123,14 @@ class ClippedLinearQuantization(nn.Module):
 
 class LearnedClippedLinearQuantization(nn.Module):
 
-    def __init__(self, num_bits, init_act_clip_val, dequantize=True, inplace=False):
+    def __init__(self, num_bits, init_act_clip_val,dequantize=True, inplace=False):
         super(LearnedClippedLinearQuantization, self).__init__()
         self.num_bits = num_bits
         self.clip_val = nn.Parameter(torch.Tensor([init_act_clip_val]))
         self.dequantize = dequantize
         self.inplace = inplace
+        self.scale=0.0
+        self.zero_point=0.0
 
     def forward(self, input):
         # Clip between 0 to the learned clip_val
@@ -137,13 +139,16 @@ class LearnedClippedLinearQuantization(nn.Module):
         input = torch.where(input < self.clip_val, input, self.clip_val)
         with torch.no_grad():
             scale, zero_point = asymmetric_linear_quantization_params(self.num_bits, 0, self.clip_val, signed=False)
+            self.scale=scale
+            self.zero_point=zero_point
+            
         input = LinearQuantizeSTE.apply(input, scale, zero_point, self.dequantize, self.inplace)
         return input
 
     def __repr__(self):
         inplace_str = ', inplace' if self.inplace else ''
-        return '{0}(num_bits={1}, clip_val={2}{3})'.format(self.__class__.__name__, self.num_bits, self.clip_val.item(),
-                                                           inplace_str)
+        return '{0}(num_bits={1}, clip_val={2}{3} scale={4},zero_point={5})'.format(self.__class__.__name__, self.num_bits, self.clip_val.item(),
+                                                           inplace_str,self.scale,self.zero_point)
 
 if __name__=="__main__":
     temp=LearnedClippedLinearQuantization(8,10)
