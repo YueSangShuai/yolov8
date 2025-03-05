@@ -12,6 +12,7 @@ logit_loss :  False                      # False or True
 student_distill_layers: []
 teacher_distill_layers: []
 
+
 data: # (str, optional) path to data file, i.e. coco8.yaml
 epochs: 100 # (int) number of epochs to train for
 time: # (float, optional) number of hours to train for, overrides epochs if supplied

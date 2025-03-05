@@ -130,6 +130,7 @@ class BaseTrainer:
 
         # Model and Dataset
         self.model = check_model_file_from_stem(self.args.model)  # add suffix, i.e. yolov8n -> yolov8n.pt
+
         self.trainset, self.testset = self.get_dataset()
         self.ema = None
 
@@ -164,11 +165,11 @@ class BaseTrainer:
         # self.distill_layers = [15,18,21]
         #-----------------------------------------------------------
         
-        
         # Callbacks
         self.callbacks = _callbacks or callbacks.get_default_callbacks()
         if RANK in {-1, 0}:
             callbacks.add_integration_callbacks(self)
+
 
     def add_callback(self, event: str, callback):
         """Appends the given callback."""
@@ -248,6 +249,8 @@ class BaseTrainer:
         ckpt = self.setup_model()
         self.model = self.model.to(self.device)
 
+
+        
         if self.model_t is not None:
             ckpt =self.setup_model_t()
             for k, v in self.model_t.model.named_parameters():
@@ -304,6 +307,7 @@ class BaseTrainer:
 
         # Dataloaders
         batch_size = self.batch_size // max(world_size, 1)
+
         self.train_loader = self.get_dataloader(self.trainset, batch_size=batch_size, rank=RANK, mode="train")
         if RANK in {-1, 0}:
             # Note: When training DOTA dataset, double batch size could get OOM on images with >2000 objects.
@@ -370,8 +374,6 @@ class BaseTrainer:
         if self.model_t:
             self.model_t= de_parallel(self.model_t)
 
-        
-        
         
         nb = len(self.train_loader)  # number of batches
         nw = max(round(self.args.warmup_epochs * nb), 100) if self.args.warmup_epochs > 0 else -1  # warmup iterations
@@ -637,11 +639,11 @@ class BaseTrainer:
 
     def setup_model(self):
         """Load/create/download model for any task."""
-        
         if isinstance(self.model, torch.nn.Module):  # if model is loaded beforehand. No setup needed
             return
         
         model, weights = self.model, None
+        
         ckpt = None
         if str(model).endswith(".pt"):
             weights, ckpt = attempt_load_one_weight(model)
@@ -664,9 +666,6 @@ class BaseTrainer:
             cfg = model
         self.model_t = self.get_model(cfg=cfg, weights=weights, verbose=RANK == -1)  # calls Model(cfg, weights)
         return ckpt
-
-    
-    
 
     def optimizer_step(self):
         """Perform a single step of the training optimizer with gradient clipping and EMA update."""

@@ -44,7 +44,6 @@ class ClassificationTrainer(BaseTrainer):
     def get_model(self, cfg=None, weights=None, verbose=True):
         """Returns a modified PyTorch model configured for training YOLO."""
         model = ClassificationModel(cfg, nc=self.data["nc"], verbose=verbose and RANK == -1)
-
         if weights:
             model.load(weights)
 
@@ -68,6 +67,7 @@ class ClassificationTrainer(BaseTrainer):
         # Load a YOLO model locally, from torchvision, or from Ultralytics assets
         if model.endswith(".pt"):
             self.model, ckpt = attempt_load_one_weight(model, device="cpu")
+            print(self.model)
             for p in self.model.parameters():
                 p.requires_grad = True  # for training
         elif model.split(".")[-1] in {"yaml", "yml"}:

@@ -79,6 +79,7 @@ from ultralytics.nn.intmodules import Conv_with_bitwidth,C2f_with_bitwidth,Class
 from ultralytics.nn.intmodules import Conv_with_bitwidthV2,C2f_with_bitwidthV2,Classify_with_bitwidthV2,Linear_with_bitwidthV2
 from ultralytics.nn.intmodules import Manba_Conv,Manba_C2f,Manba_Classify
 from ultralytics.manbaquant import QuantLinear
+from ultralytics.nn.purning import C2f_v2
 
 try:
     import thop
@@ -274,8 +275,6 @@ class BaseModel(nn.Module):
         if verbose:
             LOGGER.info(f"Transferred {len(csd)}/{len(self.model.state_dict())} items from pretrained weights")
 
-    
-    def purne(self):
         
     
     def loss(self, batch, preds=None):
@@ -966,7 +965,8 @@ def parse_model(d, ch, verbose=True):  # model_dict, input_channels(3)
             Manba_Conv,
             Classify_with_bitwidth,
             Classify_with_bitwidthV2,
-            Manba_Classify
+            Manba_Classify,
+            C2f_v2
         }:
             c1, c2 = ch[f], args[0]
             if c2 != nc:  # if c2 not equal to number of classes (i.e. for Classify() output)
@@ -980,7 +980,7 @@ def parse_model(d, ch, verbose=True):  # model_dict, input_channels(3)
                 )  # num heads
 
             args = [c1, c2, *args[1:]]
-            if m in {BottleneckCSP, C1, C2, C2f, C2fAttn, C3, C3TR, C3Ghost, C3x, RepC3,C2f_with_bitwidth,C2f_with_bitwidthV2,Manba_C2f}:
+            if m in {BottleneckCSP, C1, C2, C2f,C2f_v2, C2fAttn, C3, C3TR, C3Ghost, C3x, RepC3,C2f_with_bitwidth,C2f_with_bitwidthV2,Manba_C2f}:
                 args.insert(2, n)  # number of repeats
                 n = 1
         elif m is AIFI:
