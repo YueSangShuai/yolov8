@@ -37,13 +37,16 @@ class ClassificationTrainer(BaseTrainer):
             overrides["imgsz"] = 224
         super().__init__(cfg, overrides, _callbacks)
 
+
     def set_model_attributes(self):
         """Set the YOLO model's class names from the loaded dataset."""
         self.model.names = self.data["names"]
 
-    def get_model(self, cfg=None, weights=None, verbose=True):
+    def get_model(self, cfg=None, weights=None, verbose=True,is_purn=False):
+
         """Returns a modified PyTorch model configured for training YOLO."""
-        model = ClassificationModel(cfg, nc=self.data["nc"], verbose=verbose and RANK == -1)
+
+        model = ClassificationModel(cfg,weights=weights,nc=self.data["nc"], verbose=verbose and RANK == -1,is_purn=is_purn)
         if weights:
             model.load(weights)
 
@@ -56,18 +59,19 @@ class ClassificationTrainer(BaseTrainer):
             p.requires_grad = True  # for training
         return model
 
+
+    
     def setup_model(self):
         """Load, create or download model for any task."""
         import torchvision  # scope for faster 'import ultralytics'
-
         if isinstance(self.model, torch.nn.Module):  # if model is loaded beforehand. No setup needed
             return
 
         model, ckpt = str(self.model), None
+        
         # Load a YOLO model locally, from torchvision, or from Ultralytics assets
         if model.endswith(".pt"):
             self.model, ckpt = attempt_load_one_weight(model, device="cpu")
-            print(self.model)
             for p in self.model.parameters():
                 p.requires_grad = True  # for training
         elif model.split(".")[-1] in {"yaml", "yml"}:

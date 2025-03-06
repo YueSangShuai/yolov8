@@ -246,6 +246,7 @@ class BaseModel(nn.Module):
             (BaseModel): An updated BaseModel object.
         """
         self = super()._apply(fn)
+        # print(type(self.model))
         m = self.model[-1]  # Detect()
         if isinstance(m, Detect):  # includes all Detect subclasses like Segment, Pose, OBB, WorldDetect
             m.stride = fn(m.stride)
@@ -265,13 +266,9 @@ class BaseModel(nn.Module):
         csd = model.float().state_dict()  # checkpoint state_dict as FP32
         
 
-        
         csd = intersect_dicts(csd, self.state_dict())  # intersect
-        # print(csd)
         self.load_state_dict(csd, strict=False)  # load
 
-        
-        
         if verbose:
             LOGGER.info(f"Transferred {len(csd)}/{len(self.model.state_dict())} items from pretrained weights")
 
@@ -416,13 +413,38 @@ class PoseModel(DetectionModel):
 class ClassificationModel(BaseModel):
     """YOLOv8 classification model."""
 
-    def __init__(self, cfg="yolov8n-cls.yaml", ch=3, nc=None, verbose=True):
+    def __init__(self, cfg="yolov8n-cls.yaml",weights=None, ch=3, nc=None, verbose=True,is_purn=False):
         """Init ClassificationModel with YAML, channels, number of classes, verbose flag."""
         super().__init__()
-        self._from_yaml(cfg, ch, nc, verbose)
+        if is_purn:
+            self._from_model(cfg,weights, ch, nc, verbose)
+        else:
+            self._from_yaml(cfg, ch, nc, verbose)
+            
+        # self._from_yaml(cfg, ch, nc, verbose)
 
+
+    def _from_model(self, cfg,weight, ch, nc, verbose):
+        """Set YOLOv8 model configurations and define the model architecture."""
+        self.yaml = cfg if isinstance(cfg, dict) else yaml_model_load(cfg)  # cfg dict
+
+        
+        # Define model
+        ch = self.yaml["ch"] = self.yaml.get("ch", ch)  # input channels
+        if nc and nc != self.yaml["nc"]:
+            LOGGER.info(f"Overriding model.yaml nc={self.yaml['nc']} with nc={nc}")
+            self.yaml["nc"] = nc  # override YAML value
+        elif not nc and not self.yaml.get("nc", None):
+            raise ValueError("nc not specified. Must specify nc in model.yaml or function arguments.")
+        self.model = deepcopy(weight.model)
+        
+        self.save=[]
+        
+        self.stride = torch.Tensor([1])  # no stride constraints
+        self.names = {i: f"{i}" for i in range(self.yaml["nc"])}  # default names dict
+        self.info()
+    
     def _from_yaml(self, cfg, ch, nc, verbose):
-
         """Set YOLOv8 model configurations and define the model architecture."""
         self.yaml = cfg if isinstance(cfg, dict) else yaml_model_load(cfg)  # cfg dict
 
@@ -434,6 +456,7 @@ class ClassificationModel(BaseModel):
         elif not nc and not self.yaml.get("nc", None):
             raise ValueError("nc not specified. Must specify nc in model.yaml or function arguments.")
         self.model, self.save = parse_model(deepcopy(self.yaml), ch=ch, verbose=verbose)  # model, savelist
+        
         self.stride = torch.Tensor([1])  # no stride constraints
         self.names = {i: f"{i}" for i in range(self.yaml["nc"])}  # default names dict
         self.info()
@@ -501,6 +524,7 @@ class ClassificationModel(BaseModel):
         #     return FocalLoss(nn.BCEWithLogitsLoss(), gamma=1.5, alpha=0.25)
         # elif self.yaml["loss"]=="bitwidth":
         #     return v8ClassificationLoss_bitwidth(self.model)
+
 
 
 class RTDETRDetectionModel(DetectionModel):

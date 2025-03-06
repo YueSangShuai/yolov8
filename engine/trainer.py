@@ -130,7 +130,10 @@ class BaseTrainer:
 
         # Model and Dataset
         self.model = check_model_file_from_stem(self.args.model)  # add suffix, i.e. yolov8n -> yolov8n.pt
+        # from watchpoints import watch
+        # watch(self.model)
 
+        
         self.trainset, self.testset = self.get_dataset()
         self.ema = None
 
@@ -164,6 +167,8 @@ class BaseTrainer:
         self.teacher_distill_layers = overrides.get("teacher_distill_layers",None)
         # self.distill_layers = [15,18,21]
         #-----------------------------------------------------------
+        
+        self.is_purn=overrides.get("is_purn","False")
         
         # Callbacks
         self.callbacks = _callbacks or callbacks.get_default_callbacks()
@@ -245,12 +250,13 @@ class BaseTrainer:
     def _setup_train(self, world_size):
         """Builds dataloaders and optimizer on correct rank process."""
         # Model
+
         self.run_callbacks("on_pretrain_routine_start")
         ckpt = self.setup_model()
+        # print(self.model)
         self.model = self.model.to(self.device)
 
 
-        
         if self.model_t is not None:
             ckpt =self.setup_model_t()
             for k, v in self.model_t.model.named_parameters():
@@ -783,6 +789,8 @@ class BaseTrainer:
 
                 resume = True
                 self.args = get_cfg(ckpt_args)
+                
+                
                 self.args.model = self.args.resume = str(last)  # reinstate model
                 for k in "imgsz", "batch", "device":  # allow arg updates to reduce memory or update device on resume
                     if k in overrides:
