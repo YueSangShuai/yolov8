@@ -70,7 +70,7 @@ class CWDLoss(nn.Module):
 
 
 class MGDLoss(nn.Module):
-    def __init__(self, channels_s, channels_t, alpha_mgd=0.00007, lambda_mgd=0.65):
+    def __init__(self, channels_s, channels_t, alpha_mgd=0.001, lambda_mgd=0.65):
         super(MGDLoss, self).__init__()
         device = 'cuda' if torch.cuda.is_available() else 'cpu'
         self.alpha_mgd = alpha_mgd
@@ -80,7 +80,7 @@ class MGDLoss(nn.Module):
         self.generation = [
             nn.Sequential(
                 nn.Conv2d(channel, channel, kernel_size=3, padding=1),
-                nn.ReLU(inplace=True),
+                nn.SiLU(),
                 nn.Conv2d(channel, channel, kernel_size=3, padding=1)).to(device) for channel in channels_t
         ]
 
@@ -108,16 +108,12 @@ class MGDLoss(nn.Module):
     def get_dis_loss(self, preds_S, preds_T, idx):
         loss_mse = nn.MSELoss(reduction='sum')
         N, C, H, W = preds_T.shape
-
         device = preds_S.device
         mat = torch.rand((N, 1, H, W)).to(device)
         mat = torch.where(mat < self.lambda_mgd, 0, 1).to(device)
-
         masked_fea = torch.mul(preds_S, mat)
         new_fea = self.generation[idx](masked_fea)
-
         dis_loss = loss_mse(new_fea, preds_T) / N
-
         return dis_loss
 
 
@@ -127,14 +123,23 @@ class FeatureLoss(nn.Module):
         self.loss_weight = loss_weight
       
         device = 'cuda' if torch.cuda.is_available() else 'cpu'
+        
         self.align_module = nn.ModuleList([
             nn.Conv2d(channel, tea_channel, kernel_size=1, stride=1, padding=0).to(device)
             for channel, tea_channel in zip(channels_s, channels_t)
         ])
+
+        
+        
         self.norm = [
             nn.BatchNorm2d(tea_channel, affine=False).to(device)
             for tea_channel in channels_t
         ]
+        self.norm1 = [
+            nn.BatchNorm2d(set_channel, affine=False).to(device)
+            for set_channel in channels_s
+        ]
+        
         
         if distiller == 'mimic':
             self.feature_loss = MimicLoss(channels_s, channels_t)
@@ -153,10 +158,11 @@ class FeatureLoss(nn.Module):
         stu_feats = []
 
         for idx, (s, t) in enumerate(zip(y_s, y_t)):
-            s = self.align_module[idx](s)
+            s = self.align_module[idx](s) 
             
             s = self.norm[idx](s)
             t = self.norm[idx](t)
+            
             tea_feats.append(t)
             stu_feats.append(s)
 
@@ -178,7 +184,7 @@ class Distill_LogitLoss:
         self.p =p
         self.t_p = t_p 
         self.logit_loss = t_ft([0])
-        self.DLogitLoss = nn.MSELoss(reduction="none")
+        self.DLogitLoss = nn.MSELoss(reduction="mean")
         self.bs = p[0].shape[0]
         self.alpha = alpha
     
@@ -187,7 +193,8 @@ class Distill_LogitLoss:
         assert len(self.p) == len(self.t_p)
         for i, (pi,t_pi) in enumerate(zip(self.p,self.t_p)):  # layer index, layer predictions
             assert pi.shape == t_pi.shape
-            self.logit_loss += torch.mean(self.DLogitLoss(pi, t_pi))
+            self.logit_loss += self.DLogitLoss(pi, t_pi)
+            
         return self.logit_loss[0]*self.alpha
 
 

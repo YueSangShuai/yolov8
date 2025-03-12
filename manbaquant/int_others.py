@@ -6,8 +6,8 @@ from .quantizer import UniformAffineQuantizer
 # C8C8Add
 class QuantAdd(nn.Module):
     def __init__(self,
-                 x1_quant_params: dict = {"dynamic_method":"per_channel","per_channel_axes":[1],"n_bits":8,"percent":0.999},
-                 x2_quant_params: dict = {"dynamic_method":"per_channel","per_channel_axes":[1],"n_bits":8,"percent":0.999},
+                 x1_quant_params: dict = {"dynamic_method":"per_tensor"},
+                 x2_quant_params: dict = {"dynamic_method":"per_tensor"},
                  observe="minmax"):
         super().__init__()
         self.x1_quantizer = UniformAffineQuantizer(**x1_quant_params,observe=observe)
@@ -22,11 +22,11 @@ class QuantAdd(nn.Module):
     
 
 class QuantSoftmax(nn.Module):
-    def __init__(self,act_quant_params:dict = dict(),dim=-1):
+    def __init__(self,act_quant_params:dict = {"dynamic_method":"per_tensor"},dim=-1):
         super().__init__()
         self.act_quantizer = UniformAffineQuantizer(**act_quant_params)
         self.dim = dim
-        self.use_act_quant = False
+        self.use_act_quant = True
     
     def forward(self,attn_weights,attention_mask=None):
         ret_dtype = attn_weights.dtype
@@ -35,6 +35,7 @@ class QuantSoftmax(nn.Module):
         if attention_mask is not None:
             attn_weights = attn_weights + attention_mask
             attn_weights = torch.max(attn_weights, torch.tensor(torch.finfo(attn_weights.dtype).min))
+
 
 class QuantSilu(nn.Module):
     def __init__(self,act_quant_params:dict = dict(),):
@@ -66,9 +67,14 @@ class QuantSwiglu(nn.Module):
             return x1 *  F.sigmoid(x1) * x2
         else:
             return x1 * F.sigmoid(x1 / self.smooth.to(x1.device)) * x2
-        
+
+
+
 class QuantSwilu(nn.Module):
-    def __init__(self,x1_quant_params=dict(),x2_quant_params = dict()):
+    def __init__(self,
+                 x1_quant_params:dict = {"dynamic_method":"per_tensor"},
+                 x2_quant_params :dict = {"dynamic_method":"per_tensor"}
+                 ):
         super().__init__()
         self.x1_quantizer = UniformAffineQuantizer(**x1_quant_params)
         self.x2_quantizer = UniformAffineQuantizer(**x2_quant_params)

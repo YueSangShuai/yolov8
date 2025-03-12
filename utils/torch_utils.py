@@ -645,6 +645,7 @@ def get_fpn_features(x, model, fpn_layers=[15, 18, 21]):
             y.append(x if m.i in model.save else None)  # save output
             if m.i in fpn_layers:
                 fpn_feats.append(x)
+
     return fpn_feats
 
 def get_channels(model, fpn_layers=[15, 18, 21]):

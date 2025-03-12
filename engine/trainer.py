@@ -445,7 +445,9 @@ class BaseTrainer:
                 
                 # Forward
                 with torch.cuda.amp.autocast(self.amp):
+                    
                     batch = self.preprocess_batch(batch)
+                    
                     torch.autograd.set_detect_anomaly(True)
                     self.loss, self.loss_items = self.model(batch)
                     # assert torch.isnan(self.loss).sum() == 0, print(self.loss)
@@ -458,8 +460,9 @@ class BaseTrainer:
                                         
                     if self.model_t:
                         pred_s= self.model(batch['img'])
-                        distill_weight = ((1 - math.cos(i * math.pi / len(self.train_loader))) / 2) * (0.1 - 1) + 1
+                        
                         stu_features= get_fpn_features(batch['img'],self.model,fpn_layers=self.student_distill_layers)
+
                         with torch.no_grad():
                             pred_t_offline= self.model_t(batch['img'])
                             tea_features = get_fpn_features(batch['img'],self.model_t,fpn_layers=self.teacher_distill_layers)
@@ -472,17 +475,8 @@ class BaseTrainer:
                         distill_logit = Distill_LogitLoss(pred_s,pred_t_offline)
                         self.dlogit_loss = distill_logit()
                         resize_loss[append_len+1] = self.dlogit_loss
-                    
-                #     # 遍历模型的所有模块，筛选出Linear层并打印它们的权重
-                # for module_name, module in self.model.model.named_modules():
-                #     if isinstance(module, nn.Linear):  # 判断是否是Linear层
-                #         for param_name, param in module.named_parameters(recurse=False):
-                #             fullname = f"{module_name}.{param_name}" if module_name else param_name
-                #             resize_loss+=self.kl_divergence_loss(param.data)
-                    
-                    
-                    
-                        
+                                        
+
                     self.loss=resize_loss.sum()
                     self.loss_items=resize_loss.detach()
                     

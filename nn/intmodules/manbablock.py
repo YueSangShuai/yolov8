@@ -1,4 +1,4 @@
-from ultralytics.manbaquant import QuantConv2d,QuantLinear,QuantAdd,QuantSilu
+from ultralytics.manbaquant import QuantConv2d,QuantLinear,QuantAdd,QuantSwilu,QuantSilu
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -19,7 +19,7 @@ def autopad(k, p=None, d=1):  # kernel, padding, dilation
 class Manba_Conv(nn.Module):
     """Standard convolution with args(ch_in, ch_out, kernel, stride, padding, groups, dilation, activation)."""
 
-    default_act = QuantSilu()  # default activation
+    default_act = QuantSwilu()  # default activation
     
     def __init__(self, c1, c2, k=1, s=1, p=None, g=1, d=1, act=True):
         """Initialize Conv layer with given arguments including activation."""
@@ -101,7 +101,7 @@ class Manba_Classify(nn.Module):
          
          linear = nn.Linear(c_, c2)
          self.linear=QuantLinear(linear)
-
+         
     def forward(self, x):
         """Performs a forward pass of the YOLO model on input image data."""
         if isinstance(x, list):
